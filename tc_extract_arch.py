@@ -140,7 +140,11 @@ def scan_component_factory() -> dict[int, tuple[str, Path, (int, SnappyDecompres
 def collect_files(arch_name: str) -> tuple[dict[str, Path], int, int]:
     main = SAVE_PATH / "schematics" / "architecture" / arch_name / "circuit.data"
     assert main.is_file(), main
-    out = {arch_name: main}
+    out = {str(main.relative_to(SAVE_PATH)): main}
+    for asm in main.parent.rglob("*.asm"):
+        out[str(asm.relative_to(SAVE_PATH))] = asm
+    for spec in main.parent.rglob("*.isa"):
+        out[str(spec.relative_to(SAVE_PATH))] = spec
     content = main.read_bytes()
     ccs = scan_component_factory()
     v = content[0]
@@ -168,7 +172,7 @@ def collect_files(arch_name: str) -> tuple[dict[str, Path], int, int]:
             queue.extend(dependencies)
     for ccid in to_extract:
         name, path, _ = ccs[ccid]
-        out[name] = path
+        out[str(path.relative_to(SAVE_PATH))] = path
     return out, gate, delay
 
 
@@ -187,11 +191,7 @@ def main(args: list[str] | None = None):
     sch_files, gate, delay = collect_files(nspace.arch_name)
     zip_name = f"{Path(nspace.arch_name).name}_{gate}_{delay}.zip"
     with zipfile.ZipFile(zip_name, "w") as f:
-        for name, path in sch_files.items():
-            if "component_factory" in path.parts:
-                local_path = f"schematics/component_factory/tc-archs/{nspace.arch_name}/{name}/circuit.data"
-            else:
-                local_path = f"schematics/architecture/tc-archs/{name}/circuit.data"
+        for local_path, path in sch_files.items():
             if verbosity >= 1:
                 print(f"Adding {local_path!r} (from {path})")
             f.write(path, local_path)
